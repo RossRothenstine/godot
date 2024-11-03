@@ -658,6 +658,7 @@ Vector3 Input::get_gyroscope() const {
 }
 
 void Input::_parse_input_event_impl(const Ref<InputEvent> &p_event, bool p_is_emulated) {
+	bool handled = false;
 	// This function does the final delivery of the input event to user land.
 	// Regardless where the event came from originally, this has to happen on the main thread.
 	DEV_ASSERT(Thread::get_caller_id() == Thread::get_main_id());
@@ -707,6 +708,8 @@ void Input::_parse_input_event_impl(const Ref<InputEvent> &p_event, bool p_is_em
 		}
 
 		if (event_dispatch_function && emulate_touch_from_mouse && !p_is_emulated && mb->get_button_index() == MouseButton::LEFT) {
+			handled = true;
+
 			Ref<InputEventScreenTouch> touch_event;
 			touch_event.instantiate();
 			touch_event->set_pressed(mb->is_pressed());
@@ -732,6 +735,7 @@ void Input::_parse_input_event_impl(const Ref<InputEvent> &p_event, bool p_is_em
 		mouse_velocity_track.update(relative, screen_relative);
 
 		if (event_dispatch_function && emulate_touch_from_mouse && !p_is_emulated && mm->get_button_mask().has_flag(MouseButtonMask::LEFT)) {
+			handled = true;
 			Ref<InputEventScreenDrag> drag_event;
 			drag_event.instantiate();
 
@@ -812,6 +816,7 @@ void Input::_parse_input_event_impl(const Ref<InputEvent> &p_event, bool p_is_em
 		sd->set_screen_velocity(track.screen_velocity);
 
 		if (emulate_mouse_from_touch && sd->get_index() == mouse_from_touch_index) {
+			handled = true;
 			Ref<InputEventMouseMotion> motion_event;
 			motion_event.instantiate();
 
@@ -897,7 +902,8 @@ void Input::_parse_input_event_impl(const Ref<InputEvent> &p_event, bool p_is_em
 		}
 	}
 
-	if (event_dispatch_function) {
+	if (!handled && event_dispatch_function) {
+		handled = true;
 		_THREAD_SAFE_UNLOCK_
 		event_dispatch_function(p_event);
 		_THREAD_SAFE_LOCK_

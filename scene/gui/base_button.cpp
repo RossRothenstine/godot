@@ -60,6 +60,13 @@ void BaseButton::gui_input(const Ref<InputEvent> &p_event) {
 		return;
 	}
 
+	// Allow for touch input.
+	Ref<InputEventScreenTouch> touch = p_event;
+	if (touch.is_valid()) {
+		on_action_event(p_event);
+		return;
+	}
+
 	Ref<InputEventMouseButton> mouse_button = p_event;
 	bool ui_accept = p_event->is_action("ui_accept", true) && !p_event->is_echo();
 
@@ -145,12 +152,54 @@ void BaseButton::_toggled(bool p_pressed) {
 }
 
 void BaseButton::on_action_event(Ref<InputEvent> p_event) {
-	Ref<InputEventMouseButton> mouse_button = p_event;
 
-	if (p_event->is_pressed() && (mouse_button.is_null() || status.hovering)) {
-		status.press_attempt = true;
-		status.pressing_inside = true;
-		emit_signal(SNAME("button_down"));
+	Ref<InputEventScreenTouch> touch = p_event;
+	if (touch.is_valid()) {
+		if (touch->is_pressed()) {
+			status.press_attempt = true;
+			status.pressing_inside = true;
+			emit_signal(SNAME("button_down"));
+		}
+
+		if (status.press_attempt && status.pressing_inside) {
+			if (toggle_mode) {
+				bool is_pressed = touch->is_pressed();
+				if ((is_pressed && action_mode == ACTION_MODE_BUTTON_PRESS) || (!is_pressed && action_mode == ACTION_MODE_BUTTON_RELEASE)) {
+					if (action_mode == ACTION_MODE_BUTTON_PRESS) {
+						status.press_attempt = false;
+						status.pressing_inside = false;
+					}
+					status.pressed = !status.pressed;
+					_unpress_group();
+					if (button_group.is_valid()) {
+						button_group->emit_signal(SceneStringName(pressed), this);
+					}
+					_toggled(status.pressed);
+					_pressed();
+				}
+			} else {
+				if ((touch->is_pressed() && action_mode == ACTION_MODE_BUTTON_PRESS) || (!touch->is_pressed() && action_mode == ACTION_MODE_BUTTON_RELEASE)) {
+					_pressed();
+				}
+			}
+		}
+
+		if (!touch->is_pressed()) {
+			status.press_attempt = false;
+			status.pressing_inside = false;
+			emit_signal(SNAME("button_up"));
+		}
+
+		queue_redraw();
+		return;
+	} else {
+		Ref<InputEventMouseButton> mouse_button = p_event;
+
+		if (p_event->is_pressed() && (mouse_button.is_null() || status.hovering)) {
+			status.press_attempt = true;
+			status.pressing_inside = true;
+			emit_signal(SNAME("button_down"));
+		}
 	}
 
 	if (status.press_attempt && status.pressing_inside) {
