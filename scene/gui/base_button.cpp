@@ -162,8 +162,8 @@ void BaseButton::on_action_event(Ref<InputEvent> p_event) {
 		}
 
 		if (status.press_attempt && status.pressing_inside) {
+			bool is_pressed = touch->is_pressed();
 			if (toggle_mode) {
-				bool is_pressed = touch->is_pressed();
 				if ((is_pressed && action_mode == ACTION_MODE_BUTTON_PRESS) || (!is_pressed && action_mode == ACTION_MODE_BUTTON_RELEASE)) {
 					if (action_mode == ACTION_MODE_BUTTON_PRESS) {
 						status.press_attempt = false;
@@ -178,8 +178,12 @@ void BaseButton::on_action_event(Ref<InputEvent> p_event) {
 					_pressed();
 				}
 			} else {
-				if ((touch->is_pressed() && action_mode == ACTION_MODE_BUTTON_PRESS) || (!touch->is_pressed() && action_mode == ACTION_MODE_BUTTON_RELEASE)) {
-					_pressed();
+				// Don't allow presses when the touch is not inside the button.
+				bool is_touch_inside = has_point(touch->get_position());
+				if (is_touch_inside) {
+					if ((is_pressed && action_mode == ACTION_MODE_BUTTON_PRESS) || (!touch->is_pressed() && action_mode == ACTION_MODE_BUTTON_RELEASE)) {
+						_pressed();
+					}
 				}
 			}
 		}
