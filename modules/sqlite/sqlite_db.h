@@ -13,7 +13,7 @@ protected:
     static void _bind_methods();
 
     // This is a pointer to the SQLite database object.
-    Ref<SQLiteDB> db;
+    WeakRef db;
 };
 
 class SQLiteDB : public RefCounted {

@@ -11,6 +11,7 @@ apply from: "../scripts/publish-module.gradle"
 
 dependencies {
     implementation "androidx.fragment:fragment:$versions.fragmentVersion"
+    api "com.google.android.gms:play-services-ads:$versions.playServicesAdsVersion"
 
     testImplementation "junit:junit:4.13.2"
 }

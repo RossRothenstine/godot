@@ -3,7 +3,7 @@
 Ref<SQLiteDBStatement> SQLiteDB::prepare(const String &p_query) {
     Ref<SQLiteDBStatement> statement;
     statement.instantiate();
-    statement->db = Ref<SQLiteDB>(this);
+    statement->db.set_ref(this);
     return statement;
 }
 

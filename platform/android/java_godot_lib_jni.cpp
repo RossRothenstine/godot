@@ -39,6 +39,7 @@
 #include "java_godot_io_wrapper.h"
 #include "java_godot_wrapper.h"
 #include "jni_utils.h"
+#include "mediation_server_android.h"
 #include "net_socket_android.h"
 #include "os_android.h"
 #include "plugin/godot_plugin_jni.h"
@@ -69,6 +70,7 @@ static OS_Android *os_android = nullptr;
 static AndroidInputHandler *input_handler = nullptr;
 static GodotJavaWrapper *godot_java = nullptr;
 static GodotIOJavaWrapper *godot_io_java = nullptr;
+static MediationServerAndroid *android_mediation_service = nullptr;
 
 enum StartupStep {
 	STEP_TERMINATED = -1,
@@ -95,6 +97,10 @@ static void _terminate(JNIEnv *env, bool p_restart = false) {
 	// lets cleanup
 	// Unregister android plugins
 	unregister_plugins_singletons();
+
+    if (android_mediation_service) {
+        memdelete(android_mediation_service);
+    }
 
 	if (java_class_wrapper) {
 		memdelete(java_class_wrapper);
@@ -189,6 +195,8 @@ JNIEXPORT jboolean JNICALL Java_org_godotengine_godot_GodotLib_setup(JNIEnv *env
 			}
 		}
 	}
+
+    android_mediation_service = memnew(MediationServerAndroid);
 
 	Error err = Main::setup(OS_Android::ANDROID_EXEC_PATH, cmdlen, (char **)cmdline, false);
 	if (cmdline) {
