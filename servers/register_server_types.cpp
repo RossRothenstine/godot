@@ -75,7 +75,6 @@
 #include "rendering/storage/render_scene_buffers.h"
 #include "rendering/storage/render_scene_data.h"
 #include "rendering_server.h"
-#include "servers/mediation_server.h"
 #include "servers/rendering/shader_types.h"
 #include "text/text_server_dummy.h"
 #include "text/text_server_extension.h"
@@ -129,10 +128,6 @@ static bool has_server_feature_callback(const String &p_feature) {
 
 static MovieWriterMJPEG *writer_mjpeg = nullptr;
 static MovieWriterPNGWAV *writer_pngwav = nullptr;
-
-#ifdef TOOLS_ENABLED
-static MediationServerEditor* mediation_server_editor = nullptr;
-#endif
 
 void register_server_types() {
 	OS::get_singleton()->benchmark_begin_measure("Servers", "Register Extensions");
@@ -337,15 +332,6 @@ void register_server_types() {
 	writer_pngwav = memnew(MovieWriterPNGWAV);
 	MovieWriter::add_writer(writer_pngwav);
 
-	// Only valid on mobile for now.
-	GDREGISTER_ABSTRACT_CLASS(MediationServer);
-	#if TOOLS_ENABLED
-	mediation_server_editor = memnew(MediationServerEditor);
-	Engine::get_singleton()->add_singleton(Engine::Singleton("MediationServer", MediationServer::get_singleton(), "MediationServer"));
-	#elif defined(ANDROID_ENABLED) || defined(IOS_ENABLED)
-	Engine::get_singleton()->add_singleton(Engine::Singleton("MediationServer", MediationServer::get_singleton(), "MediationServer"));
-	#endif
-
 	OS::get_singleton()->benchmark_end_measure("Servers", "Register Extensions");
 }
 
@@ -356,10 +342,6 @@ void unregister_server_types() {
 	memdelete(shader_types);
 	memdelete(writer_mjpeg);
 	memdelete(writer_pngwav);
-
-	#if TOOLS_ENABLED
-	memdelete(mediation_server_editor);
-	#endif
 
 	OS::get_singleton()->benchmark_end_measure("Servers", "Unregister Extensions");
 }

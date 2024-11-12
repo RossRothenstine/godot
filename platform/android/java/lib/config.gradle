@@ -1,0 +1,30 @@
+ext.pathToRootDir = "../../../../"
+
+ext.eachModuleDir =
+{ closure ->
+    def rootDir = file(pathToRootDir)
+    def modulesDir = new File(rootDir, "modules")
+    if (modulesDir.exists()) {
+        modulesDir.listFiles().each { moduleDir ->
+            if (moduleDir.isDirectory()) {
+                closure(moduleDir)
+            }
+        }
+    }
+}
+
+ext.hasAndroidSources =
+{ moduleDir ->
+    def srcDir = new File(moduleDir, "android")
+    return srcDir.exists()
+}
+
+ext.eachAndroidModule = {
+    closure -> eachModuleDir { moduleDir -> if (hasAndroidSources(moduleDir)) { closure(moduleDir) } }
+}
+
+ext.addSource = { sourceSet, directory ->
+    if (directory.exists()) {
+        sourceSet.srcDirs += directory
+    }
+}

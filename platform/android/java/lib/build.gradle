@@ -3,20 +3,29 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+apply from: "./config.gradle"
+
+
 ext {
     PUBLISH_ARTIFACT_ID = 'godot'
 }
 
 apply from: "../scripts/publish-module.gradle"
 
+
+eachAndroidModule { mod ->
+    if (new File(mod, "android/module.gradle.kts").exists()) {
+        apply from: new File(mod, "android/module.gradle.kts")
+    } else {
+        apply from: new File(mod, "android/module.gradle")
+    }
+}
+
 dependencies {
     implementation "androidx.fragment:fragment:$versions.fragmentVersion"
-    api "com.google.android.gms:play-services-ads:$versions.playServicesAdsVersion"
 
     testImplementation "junit:junit:4.13.2"
 }
-
-def pathToRootDir = "../../../../"
 
 android {
     compileSdkVersion versions.compileSdk
@@ -81,6 +90,21 @@ android {
             res.srcDirs = ['res']
             aidl.srcDirs = ['aidl']
             assets.srcDirs = ['assets']
+
+
+            eachModuleDir { moduleDir ->
+                if (hasAndroidSources(moduleDir)) {
+                    addSource(java, new File(moduleDir, "android/src/main/java"))
+                    addSource(res, new File(moduleDir, "android/src/main/res"))
+                    addSource(aidl, new File(moduleDir, "android/src/main/aidl"))
+                    addSource(assets, new File(moduleDir, "android/src/main/assets"))
+                    addSource(test.java, new File(moduleDir, "android/src/test/java"))
+                }
+            }
+        }
+
+        main.java.each { dir ->
+            println(dir)
         }
 
         debug.jniLibs.srcDirs = ['libs/debug']

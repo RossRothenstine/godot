@@ -12,8 +12,7 @@ ext.versions = [
     javaVersion        : JavaVersion.VERSION_17,
     // Also update 'platform/android/detect.py#get_ndk_version()' when this is updated.
     ndkVersion         : '23.2.8568313',
-    splashscreenVersion: '1.0.1',
-    playServicesAdsVersion : '23.3.0',
+    splashscreenVersion: '1.0.1'
 ]
 
 ext.getExportPackageName = { ->

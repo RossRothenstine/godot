@@ -49,9 +49,6 @@ dependencies {
         releaseImplementation fileTree(dir: 'libs/release', include: ['**/*.jar', '*.aar'])
     }
 
-    // Services
-    implementation("com.google.android.gms:play-services-ads:$versions.playServicesAdsVersion")
-
     // Godot user plugins remote dependencies
     String[] remoteDeps = getGodotPluginsRemoteBinaries()
     if (remoteDeps != null && remoteDeps.size() > 0) {
