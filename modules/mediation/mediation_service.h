@@ -6,6 +6,15 @@
 
 class MediationService : public Object {
     GDCLASS(MediationService, Object);
+public:
+    virtual ~MediationService() = default;
+    virtual void initialize() = 0;
+};
+
+class NullMediationService : public MediationService {
+    GDCLASS(NullMediationService, MediationService);
+public:
+    void initialize() override {}
 };
 
 #endif // _MEDIATION_SERVICE_H

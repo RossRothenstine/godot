@@ -9,6 +9,7 @@
 
 class MediationEditorExportPlugin : public EditorExportPlugin {
     GDCLASS(MediationEditorExportPlugin, EditorExportPlugin);
+public:
 };
 
 #endif
