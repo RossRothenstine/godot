@@ -16,6 +16,7 @@
 #include "editor/editor_node.h"
 #include "editor/mediation_editor_plugin.h"
 #include "editor/mediation_editor_export_plugin.h"
+#include "editor/mediation_editor_service.h"
 #endif
 
 static MediationService* mediation_service;
@@ -33,7 +34,9 @@ static void _editor_init() {
 
 void initialize_mediation_module(ModuleInitializationLevel p_level) {
     if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
-        #if ANDROID_ENABLED
+        #if TOOLS_ENABLED
+        mediation_service = memnew(MediationEditorService);
+        #elif ANDROID_ENABLED
         mediation_service = memnew(AndroidMediationService);
         #else
         mediation_service = memnew(NullMediationService);

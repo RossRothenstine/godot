@@ -7,6 +7,8 @@
 class MediationService : public Object {
     GDCLASS(MediationService, Object);
 public:
+    static void _bind_methods();
+
     virtual ~MediationService() = default;
     virtual void initialize() = 0;
 };
