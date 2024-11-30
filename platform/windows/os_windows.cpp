@@ -30,7 +30,6 @@
 
 #include "os_windows.h"
 
-#include "core/string/print_string.h"
 #include "display_server_windows.h"
 #include "joypad_windows.h"
 #include "lang_table.h"
