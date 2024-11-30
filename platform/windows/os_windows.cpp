@@ -30,6 +30,7 @@
 
 #include "os_windows.h"
 
+#include "core/string/print_string.h"
 #include "display_server_windows.h"
 #include "joypad_windows.h"
 #include "lang_table.h"
@@ -2258,7 +2259,7 @@ void OS_Windows::add_frame_delay(bool p_can_draw) {
 		uint64_t current_ticks = get_ticks_usec();
 
 		// The minimum sleep resolution on windows is 1 ms on most systems.
-		if (current_ticks < (target_ticks - delay_resolution)) {
+		if (target_ticks > delay_resolution && current_ticks < (target_ticks - delay_resolution)) {
 			delay_usec((target_ticks - delay_resolution) - current_ticks);
 		}
 		// Busy wait for the remainder of time.
