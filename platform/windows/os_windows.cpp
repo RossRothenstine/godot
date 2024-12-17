@@ -582,13 +582,71 @@ String OS_Windows::get_distribution_name() const {
 String OS_Windows::get_version() const {
 	RtlGetVersionPtr version_ptr = (RtlGetVersionPtr)GetProcAddress(GetModuleHandle("ntdll.dll"), "RtlGetVersion");
 	if (version_ptr != nullptr) {
-		RTL_OSVERSIONINFOW fow;
+		RTL_OSVERSIONINFOEXW fow;
 		ZeroMemory(&fow, sizeof(fow));
 		fow.dwOSVersionInfoSize = sizeof(fow);
 		if (version_ptr(&fow) == 0x00000000) {
 			return vformat("%d.%d.%d", (int64_t)fow.dwMajorVersion, (int64_t)fow.dwMinorVersion, (int64_t)fow.dwBuildNumber);
 		}
 	}
+	return "";
+}
+
+String OS_Windows::get_version_alias() const {
+	RtlGetVersionPtr version_ptr = (RtlGetVersionPtr)GetProcAddress(GetModuleHandle("ntdll.dll"), "RtlGetVersion");
+	if (version_ptr != nullptr) {
+		RTL_OSVERSIONINFOEXW fow;
+		ZeroMemory(&fow, sizeof(fow));
+		fow.dwOSVersionInfoSize = sizeof(fow);
+		if (version_ptr(&fow) == 0x00000000) {
+			String windows_string;
+			if (fow.wProductType != VER_NT_WORKSTATION && fow.dwMajorVersion == 10 && fow.dwBuildNumber >= 26100) {
+				windows_string = "Server 2025";
+			} else if (fow.dwMajorVersion == 10 && fow.dwBuildNumber >= 20348) {
+				// Builds above 20348 correspond to Windows 11 / Windows Server 2022.
+				// Their major version numbers are still 10 though, not 11.
+				if (fow.wProductType != VER_NT_WORKSTATION) {
+					windows_string += "Server 2022";
+				} else {
+					windows_string += "11";
+				}
+			} else if (fow.dwMajorVersion == 10) {
+				if (fow.wProductType != VER_NT_WORKSTATION && fow.dwBuildNumber >= 17763) {
+					windows_string += "Server 2019";
+				} else {
+					if (fow.wProductType != VER_NT_WORKSTATION) {
+						windows_string += "Server 2016";
+					} else {
+						windows_string += "10";
+					}
+				}
+			} else if (fow.dwMajorVersion == 6 && fow.dwMinorVersion == 3) {
+				if (fow.wProductType != VER_NT_WORKSTATION) {
+					windows_string = "Server 2012 R2";
+				} else {
+					windows_string += "8.1";
+				}
+			} else if (fow.dwMajorVersion == 6 && fow.dwMinorVersion == 2) {
+				if (fow.wProductType != VER_NT_WORKSTATION) {
+					windows_string += "Server 2012";
+				} else {
+					windows_string += "8";
+				}
+			} else if (fow.dwMajorVersion == 6 && fow.dwMinorVersion == 1) {
+				if (fow.wProductType != VER_NT_WORKSTATION) {
+					windows_string = "Server 2008 R2";
+				} else {
+					windows_string += "7";
+				}
+			} else {
+				windows_string += "Unknown";
+			}
+			// Windows versions older than 7 cannot run Godot.
+
+			return vformat("%s (build %d)", windows_string, (int64_t)fow.dwBuildNumber);
+		}
+	}
+
 	return "";
 }
 
@@ -1727,7 +1785,7 @@ String OS_Windows::get_environment(const String &p_var) const {
 }
 
 void OS_Windows::set_environment(const String &p_var, const String &p_value) const {
-	ERR_FAIL_COND_MSG(p_var.is_empty() || p_var.contains("="), vformat("Invalid environment variable name '%s', cannot be empty or include '='.", p_var));
+	ERR_FAIL_COND_MSG(p_var.is_empty() || p_var.contains_char('='), vformat("Invalid environment variable name '%s', cannot be empty or include '='.", p_var));
 	Char16String var = p_var.utf16();
 	Char16String value = p_value.utf16();
 	ERR_FAIL_COND_MSG(var.length() + value.length() + 2 > 32767, vformat("Invalid definition for environment variable '%s', cannot exceed 32767 characters.", p_var));
@@ -1735,7 +1793,7 @@ void OS_Windows::set_environment(const String &p_var, const String &p_value) con
 }
 
 void OS_Windows::unset_environment(const String &p_var) const {
-	ERR_FAIL_COND_MSG(p_var.is_empty() || p_var.contains("="), vformat("Invalid environment variable name '%s', cannot be empty or include '='.", p_var));
+	ERR_FAIL_COND_MSG(p_var.is_empty() || p_var.contains_char('='), vformat("Invalid environment variable name '%s', cannot be empty or include '='.", p_var));
 	SetEnvironmentVariableW((LPCWSTR)(p_var.utf16().get_data()), nullptr); // Null to delete.
 }
 
@@ -2280,6 +2338,8 @@ void OS_Windows::add_frame_delay(bool p_can_draw) {
 
 		if (target_ticks > current_ticks + delay_resolution) {
 			uint64_t delay_time = target_ticks - current_ticks - delay_resolution;
+			// Make sure we always sleep for a multiple of delay_resolution to avoid overshooting.
+			// Refer to: https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-sleep#remarks
 			delay_time = (delay_time / delay_resolution) * delay_resolution;
 			if (delay_time > 0) {
 				delay_usec(delay_time);

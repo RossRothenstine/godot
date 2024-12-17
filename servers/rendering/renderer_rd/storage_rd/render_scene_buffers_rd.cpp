@@ -119,7 +119,7 @@ void RenderSceneBuffersRD::update_samplers() {
 
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 	material_storage->samplers_rd_free(samplers);
-	samplers = material_storage->samplers_rd_allocate(computed_mipmap_bias);
+	samplers = material_storage->samplers_rd_allocate(computed_mipmap_bias, anisotropic_filtering_level);
 }
 
 void RenderSceneBuffersRD::cleanup() {
@@ -157,6 +157,7 @@ void RenderSceneBuffersRD::configure(const RenderSceneBuffersConfiguration *p_co
 
 	fsr_sharpness = p_config->get_fsr_sharpness();
 	texture_mipmap_bias = p_config->get_texture_mipmap_bias();
+	anisotropic_filtering_level = p_config->get_anisotropic_filtering_level();
 	use_taa = p_config->get_use_taa();
 	use_debanding = p_config->get_use_debanding();
 
@@ -170,6 +171,9 @@ void RenderSceneBuffersRD::configure(const RenderSceneBuffersConfiguration *p_co
 	// Create our color buffer.
 	const bool resolve_target = msaa_3d != RS::VIEWPORT_MSAA_DISABLED;
 	create_texture(RB_SCOPE_BUFFERS, RB_TEX_COLOR, base_data_format, get_color_usage_bits(resolve_target, false, can_be_storage));
+
+	// TODO: Detect when it is safe to use RD::TEXTURE_USAGE_TRANSIENT_BIT for RB_TEX_DEPTH, RB_TEX_COLOR_MSAA and/or RB_TEX_DEPTH_MSAA.
+	// (it means we cannot sample from it, we cannot copy from/to it) to save VRAM (and maybe performance too).
 
 	// Create our depth buffer.
 	create_texture(RB_SCOPE_BUFFERS, RB_TEX_DEPTH, get_depth_format(resolve_target, false, can_be_storage), get_depth_usage_bits(resolve_target, false, can_be_storage));
@@ -226,6 +230,12 @@ void RenderSceneBuffersRD::set_fsr_sharpness(float p_fsr_sharpness) {
 
 void RenderSceneBuffersRD::set_texture_mipmap_bias(float p_texture_mipmap_bias) {
 	texture_mipmap_bias = p_texture_mipmap_bias;
+
+	update_samplers();
+}
+
+void RenderSceneBuffersRD::set_anisotropic_filtering_level(RS::ViewportAnisotropicFiltering p_anisotropic_filtering_level) {
+	anisotropic_filtering_level = p_anisotropic_filtering_level;
 
 	update_samplers();
 }

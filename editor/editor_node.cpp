@@ -2085,7 +2085,7 @@ void EditorNode::_dialog_action(String p_file) {
 			load_scene(p_file);
 		} break;
 		case SETTINGS_PICK_MAIN_SCENE: {
-			ProjectSettings::get_singleton()->set("application/run/main_scene", p_file);
+			ProjectSettings::get_singleton()->set("application/run/main_scene", ResourceUID::path_to_uid(p_file));
 			ProjectSettings::get_singleton()->save();
 			// TODO: Would be nice to show the project manager opened with the highlighted field.
 
@@ -2134,7 +2134,7 @@ void EditorNode::_dialog_action(String p_file) {
 		} break;
 
 		case FILE_SAVE_AND_RUN_MAIN_SCENE: {
-			ProjectSettings::get_singleton()->set("application/run/main_scene", p_file);
+			ProjectSettings::get_singleton()->set("application/run/main_scene", ResourceUID::path_to_uid(p_file));
 			ProjectSettings::get_singleton()->save();
 
 			if (file->get_file_mode() == EditorFileDialog::FILE_MODE_SAVE_FILE) {
@@ -2318,16 +2318,20 @@ void EditorNode::edit_item(Object *p_object, Object *p_editing_owner) {
 		active_plugins[owner_id].erase(plugin);
 	}
 
+	LocalVector<EditorPlugin *> to_over_edit;
+
 	// Send the edited object to the plugins.
 	for (EditorPlugin *plugin : available_plugins) {
 		if (active_plugins[owner_id].has(plugin)) {
-			// Plugin was already active, just change the object.
+			// Plugin was already active, just change the object and ensure it's visible.
+			plugin->make_visible(true);
 			plugin->edit(p_object);
 			continue;
 		}
 
 		if (active_plugins.has(plugin->get_instance_id())) {
 			// Plugin is already active, but as self-owning, so it needs a separate check.
+			plugin->make_visible(true);
 			plugin->edit(p_object);
 			continue;
 		}
@@ -2346,6 +2350,11 @@ void EditorNode::edit_item(Object *p_object, Object *p_editing_owner) {
 
 		// Activate previously inactive plugin and edit the object.
 		active_plugins[owner_id].insert(plugin);
+		// TODO: Call the function directly once a proper priority system is implemented.
+		to_over_edit.push_back(plugin);
+	}
+
+	for (EditorPlugin *plugin : to_over_edit) {
 		_plugin_over_edit(plugin, p_object);
 	}
 }
@@ -2620,7 +2629,7 @@ void EditorNode::_edit_current(bool p_skip_foreign, bool p_skip_inspector_update
 		if (main_plugin && !skip_main_plugin) {
 			// Special case if use of external editor is true.
 			Resource *current_res = Object::cast_to<Resource>(current_obj);
-			if (main_plugin->get_name() == "Script" && current_res && !current_res->is_built_in() && (bool(EDITOR_GET("text_editor/external/use_external_editor")) || overrides_external_editor(current_obj))) {
+			if (main_plugin->get_plugin_name() == "Script" && current_res && !current_res->is_built_in() && (bool(EDITOR_GET("text_editor/external/use_external_editor")) || overrides_external_editor(current_obj))) {
 				if (!changing_scene) {
 					main_plugin->edit(current_obj);
 				}
@@ -2781,9 +2790,7 @@ void EditorNode::_menu_option_confirm(int p_option, bool p_confirmed) {
 
 				const int saved = _save_external_resources(true);
 				if (saved > 0) {
-					show_accept(
-							vformat(TTR("The current scene has no root node, but %d modified external resource(s) and/or plugin data were saved anyway."), saved),
-							TTR("OK"));
+					EditorToaster::get_singleton()->popup_str(vformat(TTR("The current scene has no root node, but %d modified external resource(s) and/or plugin data were saved anyway."), saved), EditorToaster::SEVERITY_INFO);
 				} else if (p_option == FILE_SAVE_AS_SCENE) {
 					// Don't show this dialog when pressing Ctrl + S to avoid interfering with script saving.
 					show_accept(
@@ -3441,6 +3448,11 @@ void EditorNode::_update_file_menu_closed() {
 	file_menu->set_item_disabled(file_menu->get_item_index(FILE_OPEN_PREV), false);
 }
 
+void EditorNode::_palette_quick_open_dialog() {
+	quick_open_color_palette->popup_dialog({ "ColorPalette" }, palette_file_selected_callback);
+	quick_open_color_palette->set_title(TTR("Quick Open Color Palette..."));
+}
+
 void EditorNode::replace_resources_in_object(Object *p_object, const Vector<Ref<Resource>> &p_source_resources, const Vector<Ref<Resource>> &p_target_resource) {
 	List<PropertyInfo> pi;
 	p_object->get_property_list(&pi);
@@ -3900,6 +3912,10 @@ void EditorNode::setup_color_picker(ColorPicker *p_picker) {
 
 	p_picker->set_color_mode((ColorPicker::ColorModeType)default_color_mode);
 	p_picker->set_picker_shape((ColorPicker::PickerShapeType)picker_shape);
+
+	p_picker->set_quick_open_callback(callable_mp(this, &EditorNode::_palette_quick_open_dialog));
+	p_picker->set_palette_saved_callback(callable_mp(EditorFileSystem::get_singleton(), &EditorFileSystem::update_file));
+	palette_file_selected_callback = callable_mp(p_picker, &ColorPicker::_quick_open_palette_file_selected);
 }
 
 bool EditorNode::is_scene_open(const String &p_path) {
@@ -3946,25 +3962,25 @@ Error EditorNode::load_scene(const String &p_scene, bool p_ignore_broken_deps, b
 		return OK;
 	}
 
+	String lpath = ResourceUID::ensure_path(p_scene);
 	if (!p_set_inherited) {
 		for (int i = 0; i < editor_data.get_edited_scene_count(); i++) {
-			if (editor_data.get_scene_path(i) == p_scene) {
+			if (editor_data.get_scene_path(i) == lpath) {
 				_set_current_scene(i);
 				return OK;
 			}
 		}
 
-		if (!p_force_open_imported && FileAccess::exists(p_scene + ".import")) {
-			open_imported->set_text(vformat(TTR("Scene '%s' was automatically imported, so it can't be modified.\nTo make changes to it, a new inherited scene can be created."), p_scene.get_file()));
+		if (!p_force_open_imported && FileAccess::exists(lpath + ".import")) {
+			open_imported->set_text(vformat(TTR("Scene '%s' was automatically imported, so it can't be modified.\nTo make changes to it, a new inherited scene can be created."), lpath.get_file()));
 			open_imported->popup_centered();
 			new_inherited_button->grab_focus();
-			open_import_request = p_scene;
+			open_import_request = lpath;
 			return OK;
 		}
 	}
 
-	String lpath = ProjectSettings::get_singleton()->localize_path(p_scene);
-
+	lpath = ProjectSettings::get_singleton()->localize_path(lpath);
 	if (!lpath.begins_with("res://")) {
 		show_accept(TTR("Error loading scene, it must be inside the project path. Use 'Import' to open the scene, then save it inside the project path."), TTR("OK"));
 		opening_prev = false;
@@ -4065,7 +4081,7 @@ Error EditorNode::load_scene(const String &p_scene, bool p_ignore_broken_deps, b
 
 	set_edited_scene(new_scene);
 
-	String config_file_path = EditorPaths::get_singleton()->get_project_settings_dir().path_join(p_scene.get_file() + "-editstate-" + p_scene.md5_text() + ".cfg");
+	String config_file_path = EditorPaths::get_singleton()->get_project_settings_dir().path_join(lpath.get_file() + "-editstate-" + lpath.md5_text() + ".cfg");
 	Ref<ConfigFile> editor_state_cf;
 	editor_state_cf.instantiate();
 	Error editor_state_cf_err = editor_state_cf->load(config_file_path);
@@ -4462,7 +4478,7 @@ void EditorNode::replace_history_reimported_nodes(Node *p_original_root_node, No
 	}
 }
 
-void EditorNode::open_request(const String &p_path) {
+void EditorNode::open_request(const String &p_path, bool p_set_inherited) {
 	if (!opening_prev) {
 		List<String>::Element *prev_scene_item = previous_scenes.find(p_path);
 		if (prev_scene_item != nullptr) {
@@ -4470,7 +4486,7 @@ void EditorNode::open_request(const String &p_path) {
 		}
 	}
 
-	load_scene(p_path); // As it will be opened in separate tab.
+	load_scene(p_path, false, p_set_inherited); // As it will be opened in separate tab.
 }
 
 bool EditorNode::has_previous_scenes() const {
@@ -4961,7 +4977,7 @@ String EditorNode::_get_system_info() const {
 	if (distribution_name.is_empty()) {
 		distribution_name = "Other";
 	}
-	const String distribution_version = OS::get_singleton()->get_version();
+	const String distribution_version = OS::get_singleton()->get_version_alias();
 
 	String godot_version = "Godot v" + String(VERSION_FULL_CONFIG);
 	if (String(VERSION_BUILD) != "official") {
@@ -5828,7 +5844,11 @@ PopupMenu *EditorNode::get_export_as_menu() {
 }
 
 void EditorNode::_dropped_files(const Vector<String> &p_files) {
-	String to_path = ProjectSettings::get_singleton()->globalize_path(FileSystemDock::get_singleton()->get_current_directory());
+	String to_path = FileSystemDock::get_singleton()->get_folder_path_at_mouse_position();
+	if (to_path.is_empty()) {
+		to_path = FileSystemDock::get_singleton()->get_current_directory();
+	}
+	to_path = ProjectSettings::get_singleton()->globalize_path(to_path);
 
 	_add_dropped_files_recursive(p_files, to_path);
 
@@ -7865,6 +7885,9 @@ EditorNode::EditorNode() {
 
 	quick_open_dialog = memnew(EditorQuickOpenDialog);
 	gui_base->add_child(quick_open_dialog);
+
+	quick_open_color_palette = memnew(EditorQuickOpenDialog);
+	gui_base->add_child(quick_open_color_palette);
 
 	_update_recent_scenes();
 

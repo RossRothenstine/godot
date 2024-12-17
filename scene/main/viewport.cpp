@@ -1455,7 +1455,14 @@ void Viewport::_gui_show_tooltip() {
 
 	// Controls can implement `make_custom_tooltip` to provide their own tooltip.
 	// This should be a Control node which will be added as child to a TooltipPanel.
-	Control *base_tooltip = tooltip_owner ? tooltip_owner->make_custom_tooltip(gui.tooltip_text) : nullptr;
+	Control *base_tooltip = tooltip_owner->make_custom_tooltip(gui.tooltip_text);
+
+	// When the custom control is not visible, don't show any tooltip.
+	// This way, the custom tooltip from `ConnectionsDockTree` can create
+	// its own tooltip without conflicting with the default one, even an empty tooltip.
+	if (base_tooltip && !base_tooltip->is_visible()) {
+		return;
+	}
 
 	if (gui.tooltip_text.is_empty() && !base_tooltip) {
 		return; // Nothing to show.
@@ -1631,9 +1638,11 @@ void Viewport::_gui_call_notification(Control *p_control, int p_what) {
 	}
 }
 
+// `gui_find_control` doesn't take embedded windows into account. So the caller of this function
+// needs to make sure, that there is no embedded window at the specified position.
 Control *Viewport::gui_find_control(const Point2 &p_global) {
 	ERR_MAIN_THREAD_GUARD_V(nullptr);
-	// Handle subwindows.
+
 	_gui_sort_roots();
 
 	for (List<Control *>::Element *E = gui.roots.back(); E; E = E->prev()) {
@@ -1742,6 +1751,11 @@ void Viewport::_gui_input_event(Ref<InputEvent> p_event) {
 	if (mb.is_valid()) {
 		Point2 mpos = mb->get_position();
 		if (mb->is_pressed()) {
+			if (gui.dragging && mb->get_button_index() == MouseButton::RIGHT) {
+				_perform_drop();
+				set_input_as_handled();
+				return;
+			}
 			MouseButtonMask button_mask = mouse_button_to_mask(mb->get_button_index());
 			if (!gui.mouse_focus_mask.is_empty() && !gui.mouse_focus_mask.has_flag(button_mask)) {
 				// Do not steal mouse focus and stuff while a focus mask without the current mouse button exists.
@@ -1990,7 +2004,8 @@ void Viewport::_gui_input_event(Ref<InputEvent> p_event) {
 
 			Control *drag_preview = _gui_get_drag_preview();
 			if (drag_preview) {
-				drag_preview->set_position(mpos);
+				Vector2 pos = drag_preview->get_canvas_transform().affine_inverse().xform(mpos);
+				drag_preview->set_position(pos);
 			}
 
 			gui.drag_mouse_over = section_root->gui.target_control;
@@ -3893,6 +3908,16 @@ bool Viewport::get_canvas_cull_mask_bit(uint32_t p_layer) const {
 	return (canvas_cull_mask & (1 << p_layer));
 }
 
+#ifdef TOOLS_ENABLED
+bool Viewport::is_visible_subviewport() const {
+	if (!is_sub_viewport()) {
+		return true;
+	}
+	SubViewportContainer *container = Object::cast_to<SubViewportContainer>(get_parent());
+	return container && container->is_visible_in_tree();
+}
+#endif // TOOLS_ENABLED
+
 void Viewport::_update_audio_listener_2d() {
 	if (AudioServer::get_singleton()) {
 		AudioServer::get_singleton()->notify_listener_changed();
@@ -4526,7 +4551,7 @@ void Viewport::set_use_xr(bool p_use_xr) {
 
 			// Reset render target override textures.
 			RID rt = RS::get_singleton()->viewport_get_render_target(viewport);
-			RSG::texture_storage->render_target_set_override(rt, RID(), RID(), RID());
+			RSG::texture_storage->render_target_set_override(rt, RID(), RID(), RID(), RID());
 		}
 	}
 }
@@ -4598,6 +4623,21 @@ void Viewport::set_texture_mipmap_bias(float p_texture_mipmap_bias) {
 float Viewport::get_texture_mipmap_bias() const {
 	ERR_READ_THREAD_GUARD_V(0);
 	return texture_mipmap_bias;
+}
+
+void Viewport::set_anisotropic_filtering_level(AnisotropicFiltering p_anisotropic_filtering_level) {
+	ERR_MAIN_THREAD_GUARD;
+	if (anisotropic_filtering_level == p_anisotropic_filtering_level) {
+		return;
+	}
+
+	anisotropic_filtering_level = p_anisotropic_filtering_level;
+	RS::get_singleton()->viewport_set_anisotropic_filtering_level(viewport, (RS::ViewportAnisotropicFiltering)(int)p_anisotropic_filtering_level);
+}
+
+Viewport::AnisotropicFiltering Viewport::get_anisotropic_filtering_level() const {
+	ERR_READ_THREAD_GUARD_V(ANISOTROPY_DISABLED);
+	return anisotropic_filtering_level;
 }
 
 #endif // _3D_DISABLED
@@ -4785,6 +4825,9 @@ void Viewport::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_texture_mipmap_bias", "texture_mipmap_bias"), &Viewport::set_texture_mipmap_bias);
 	ClassDB::bind_method(D_METHOD("get_texture_mipmap_bias"), &Viewport::get_texture_mipmap_bias);
 
+	ClassDB::bind_method(D_METHOD("set_anisotropic_filtering_level", "anisotropic_filtering_level"), &Viewport::set_anisotropic_filtering_level);
+	ClassDB::bind_method(D_METHOD("get_anisotropic_filtering_level"), &Viewport::get_anisotropic_filtering_level);
+
 	ClassDB::bind_method(D_METHOD("set_vrs_mode", "mode"), &Viewport::set_vrs_mode);
 	ClassDB::bind_method(D_METHOD("get_vrs_mode"), &Viewport::get_vrs_mode);
 
@@ -4820,6 +4863,7 @@ void Viewport::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "scaling_3d_mode", PROPERTY_HINT_ENUM, "Bilinear (Fastest),FSR 1.0 (Fast),FSR 2.2 (Slow)"), "set_scaling_3d_mode", "get_scaling_3d_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "scaling_3d_scale", PROPERTY_HINT_RANGE, "0.25,2.0,0.01"), "set_scaling_3d_scale", "get_scaling_3d_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "texture_mipmap_bias", PROPERTY_HINT_RANGE, "-2,2,0.001"), "set_texture_mipmap_bias", "get_texture_mipmap_bias");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "anisotropic_filtering_level", PROPERTY_HINT_ENUM, String::utf8("Disabled (Fastest),2× (Faster),4× (Fast),8× (Average),16x (Slow)")), "set_anisotropic_filtering_level", "get_anisotropic_filtering_level");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "fsr_sharpness", PROPERTY_HINT_RANGE, "0,2,0.1"), "set_fsr_sharpness", "get_fsr_sharpness");
 	ADD_GROUP("Variable Rate Shading", "vrs_");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "vrs_mode", PROPERTY_HINT_ENUM, "Disabled,Texture,Depth buffer,XR"), "set_vrs_mode", "get_vrs_mode");
@@ -4878,6 +4922,13 @@ void Viewport::_bind_methods() {
 	BIND_ENUM_CONSTANT(MSAA_4X);
 	BIND_ENUM_CONSTANT(MSAA_8X);
 	BIND_ENUM_CONSTANT(MSAA_MAX);
+
+	BIND_ENUM_CONSTANT(ANISOTROPY_DISABLED);
+	BIND_ENUM_CONSTANT(ANISOTROPY_2X);
+	BIND_ENUM_CONSTANT(ANISOTROPY_4X);
+	BIND_ENUM_CONSTANT(ANISOTROPY_8X);
+	BIND_ENUM_CONSTANT(ANISOTROPY_16X);
+	BIND_ENUM_CONSTANT(ANISOTROPY_MAX);
 
 	BIND_ENUM_CONSTANT(SCREEN_SPACE_AA_DISABLED);
 	BIND_ENUM_CONSTANT(SCREEN_SPACE_AA_FXAA);
@@ -5004,6 +5055,7 @@ Viewport::Viewport() {
 	set_scaling_3d_scale(GLOBAL_GET("rendering/scaling_3d/scale"));
 	set_fsr_sharpness((float)GLOBAL_GET("rendering/scaling_3d/fsr_sharpness"));
 	set_texture_mipmap_bias((float)GLOBAL_GET("rendering/textures/default_filters/texture_mipmap_bias"));
+	set_anisotropic_filtering_level((Viewport::AnisotropicFiltering)(int)GLOBAL_GET("rendering/textures/default_filters/anisotropic_filtering_level"));
 #endif // _3D_DISABLED
 
 	set_sdf_oversize(sdf_oversize); // Set to server.
