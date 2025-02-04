@@ -303,6 +303,7 @@ void FileSystemDock::_create_tree(TreeItem *p_parent, EditorFileSystemDirectory 
 			file_item->set_icon(0, _get_tree_item_icon(!file_info.import_broken, file_info.type, file_info.icon_path));
 			if (da->is_link(file_metadata)) {
 				file_item->set_icon_overlay(0, get_editor_theme_icon(SNAME("LinkOverlay")));
+				// TRANSLATORS: This is a tooltip for a file that is a symbolic link to another file.
 				file_item->set_tooltip_text(0, vformat(TTR("Link to: %s"), da->read_link(file_metadata)));
 			}
 			file_item->set_icon_max_width(0, icon_size);
@@ -1486,6 +1487,11 @@ void FileSystemDock::_try_move_item(const FileOrFolder &p_item, const String &p_
 						break;
 					}
 				}
+			} else {
+				Ref<Resource> res = ResourceCache::get_ref(old_path);
+				if (res.is_valid()) {
+					res->set_path_cache(new_path);
+				}
 			}
 		}
 
@@ -1953,17 +1959,11 @@ void FileSystemDock::_move_operation_confirm(const String &p_to_path, bool p_cop
 	}
 
 	if (p_copy) {
-		bool is_copied = false;
 		for (int i = 0; i < to_move.size(); i++) {
 			if (to_move[i].path != new_paths[i]) {
 				_try_duplicate_item(to_move[i], new_paths[i]);
 				select_after_scan = new_paths[i];
-				is_copied = true;
 			}
-		}
-
-		if (is_copied) {
-			_rescan();
 		}
 	} else {
 		// Check groups.

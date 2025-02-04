@@ -2380,7 +2380,11 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 				instance_count /= surf->owner->trail_steps;
 			}
 
-			RD::get_singleton()->draw_list_draw(draw_list, index_array_rd.is_valid(), instance_count);
+			if (bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT)) {
+				RD::get_singleton()->draw_list_draw_indirect(draw_list, index_array_rd.is_valid(), mesh_storage->_multimesh_get_command_buffer_rd_rid(surf->owner->data->base), surf->surface_index * sizeof(uint32_t) * mesh_storage->INDIRECT_MULTIMESH_COMMAND_STRIDE, 1, 0);
+			} else {
+				RD::get_singleton()->draw_list_draw(draw_list, index_array_rd.is_valid(), instance_count);
+			}
 		}
 	}
 
@@ -2801,6 +2805,7 @@ void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_ge
 
 	if (ginstance->data->base_type == RS::INSTANCE_MULTIMESH) {
 		ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH;
+
 		if (mesh_storage->multimesh_get_transform_format(ginstance->data->base) == RS::MULTIMESH_TRANSFORM_2D) {
 			ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH_FORMAT_2D;
 		}
@@ -2809,6 +2814,9 @@ void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_ge
 		}
 		if (mesh_storage->multimesh_uses_custom_data(ginstance->data->base)) {
 			ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH_HAS_CUSTOM_DATA;
+		}
+		if (mesh_storage->multimesh_uses_indirect(ginstance->data->base)) {
+			ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT;
 		}
 
 		ginstance->transforms_uniform_set = mesh_storage->multimesh_get_3d_uniform_set(ginstance->data->base, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET);
@@ -2979,7 +2987,7 @@ void RenderForwardMobile::_mesh_compile_pipeline_for_surface(SceneShaderForwardM
 	uint64_t input_mask = p_shader->get_vertex_input_mask(r_pipeline_key.version, true);
 	r_pipeline_key.vertex_format_id = mesh_storage->mesh_surface_get_vertex_format(p_mesh_surface, input_mask, p_instanced_surface, false);
 	r_pipeline_key.ubershader = true;
-	p_shader->pipeline_hash_map.compile_pipeline(r_pipeline_key, r_pipeline_key.hash(), p_source);
+	p_shader->pipeline_hash_map.compile_pipeline(r_pipeline_key, r_pipeline_key.hash(), p_source, r_pipeline_key.ubershader);
 
 	if (r_pipeline_pairs != nullptr) {
 		r_pipeline_pairs->push_back({ p_shader, r_pipeline_key });

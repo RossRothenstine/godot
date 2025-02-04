@@ -100,6 +100,8 @@ class ProjectSettingsEditor;
 class SceneImportSettingsDialog;
 class SurfaceUpgradeTool;
 class SurfaceUpgradeDialog;
+class UIDUpgradeTool;
+class UIDUpgradeDialog;
 
 struct EditorProgress {
 	String task;
@@ -166,6 +168,7 @@ public:
 		TOOLS_ORPHAN_RESOURCES,
 		TOOLS_BUILD_PROFILE_MANAGER,
 		TOOLS_SURFACE_UPGRADE,
+		TOOLS_UID_UPGRADE,
 		TOOLS_CUSTOM,
 
 		VCS_METADATA,
@@ -460,7 +463,14 @@ private:
 
 	SurfaceUpgradeTool *surface_upgrade_tool = nullptr;
 	SurfaceUpgradeDialog *surface_upgrade_dialog = nullptr;
+
 	bool run_surface_upgrade_tool = false;
+
+	UIDUpgradeTool *uid_upgrade_tool = nullptr;
+	UIDUpgradeDialog *uid_upgrade_dialog = nullptr;
+
+	bool run_uid_upgrade_tool = false;
+	bool should_prompt_uid_upgrade_tool = false;
 
 	bool was_window_windowed_last = false;
 
@@ -566,6 +576,8 @@ private:
 	void _scene_tab_closed(int p_tab);
 	void _cancel_close_scene_tab();
 
+	void _prepare_save_confirmation_popup();
+
 	void _inherit_request(String p_file);
 	void _instantiate_request(const Vector<String> &p_files);
 
@@ -592,6 +604,7 @@ private:
 
 	void _exit_editor(int p_exit_code);
 
+	virtual void input(const Ref<InputEvent> &p_event) override;
 	virtual void shortcut_input(const Ref<InputEvent> &p_event) override;
 
 	bool has_main_screen() const { return true; }
@@ -745,7 +758,6 @@ public:
 	void save_resource_in_path(const Ref<Resource> &p_resource, const String &p_path);
 	void save_resource(const Ref<Resource> &p_resource);
 	void save_resource_as(const Ref<Resource> &p_resource, const String &p_at_path = String());
-	void ensure_uid_file(const String &p_new_resource_path);
 
 	void show_about() { _menu_option_confirm(HELP_ABOUT, false); }
 
