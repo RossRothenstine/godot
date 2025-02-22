@@ -157,7 +157,6 @@ void BaseButton::_toggled(bool p_pressed) {
 
 void BaseButton::on_action_event(Ref<InputEvent> p_event) {
 
-<<<<<<< HEAD
 	Ref<InputEventScreenTouch> touch = p_event;
 	if (touch.is_valid()) {
 		if (touch->is_pressed()) {
